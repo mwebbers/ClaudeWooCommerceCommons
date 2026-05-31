@@ -304,6 +304,25 @@ def upload_to_dropbox(
     return r.json().get("path_display", remote_path)
 
 
+def build_remote_path(base: str | None, folder: str | None, filename: str) -> str:
+    """Join an optional base directory, an optional sub-folder and a filename
+    into a Dropbox remote path.
+
+    Lets a family of routines share one base (`DROPBOX_PATH`) while each writes
+    into its own sub-folder (`<PREFIX>_DROPBOX_FOLDER`): e.g.
+    base ``/Reports`` + folder ``Stock`` -> ``/Reports/Stock/<filename>``. An
+    empty/None folder drops the files straight into `base`, and an empty/None
+    base falls back to the Dropbox root — so leaving the folder unset reproduces
+    the old single-directory behaviour. Slashes are normalised, so a trailing or
+    duplicate ``/`` in either segment does not matter.
+    """
+    parts: list[str] = []
+    for seg in (base, folder):
+        if seg:
+            parts += [p for p in seg.strip("/").split("/") if p]
+    return ("/" + "/".join(parts) + "/" + filename) if parts else "/" + filename
+
+
 # ---------------------------------------------------------------------------
 # ISO-week reporting windows
 # ---------------------------------------------------------------------------

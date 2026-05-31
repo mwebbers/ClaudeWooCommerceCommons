@@ -296,6 +296,26 @@ def test_upload_to_dropbox_failure(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# F-010 Dropbox remote-path builder
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.feature("F-010")
+@pytest.mark.parametrize("base,folder,expected", [
+    ("/Reports", "Stock", "/Reports/Stock/r.xlsx"),
+    ("/Reports/", "Stock", "/Reports/Stock/r.xlsx"),   # trailing slash on base
+    ("/Reports", "", "/Reports/r.xlsx"),               # empty folder -> into base
+    ("/Reports", None, "/Reports/r.xlsx"),             # unset folder -> into base
+    (None, "Stock", "/Stock/r.xlsx"),                  # no base -> folder at root
+    ("", "", "/r.xlsx"),                               # both empty -> root (old behaviour)
+    (None, None, "/r.xlsx"),
+    ("/a/b/", "/c/d/", "/a/b/c/d/r.xlsx"),             # nested + stray slashes normalised
+])
+def test_build_remote_path(base, folder, expected):
+    assert C.build_remote_path(base, folder, "r.xlsx") == expected
+
+
+# ---------------------------------------------------------------------------
 # F-009 Excel helpers
 # ---------------------------------------------------------------------------
 

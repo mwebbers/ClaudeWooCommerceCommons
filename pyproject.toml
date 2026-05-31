@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-woocommerce-commons"
-version = "0.2.0"
+version = "0.3.0"
 description = "Shared, vendor-agnostic WooCommerce REST client and reporting helpers (paginated client, parsing, ISO-week windows, Dropbox upload, Excel styling) for WooCommerce reporting routines"
 # 3.9+ — the code targets a broad floor so it installs in older runtimes
 # (e.g. a Python 3.11 scheduled-task sandbox). Verified on 3.9 and 3.12.

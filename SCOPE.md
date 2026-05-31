@@ -78,6 +78,15 @@ Each feature is testable. The ID in brackets is referenced by tests via
   desktop notification — these are automated runs). It returns the remote path
   on success and raises on failure so the caller chooses the exit behaviour.
 
+- **[F-010] Dropbox remote-path builder.** `build_remote_path(base, folder,
+  filename)` joins an optional base directory, an optional sub-folder and a
+  filename into one Dropbox path, normalising slashes. It lets a family of
+  routines share one base (`DROPBOX_PATH`) while each writes into its own
+  sub-folder (`<PREFIX>_DROPBOX_FOLDER`): base `/Reports` + folder `Stock` →
+  `/Reports/Stock/<filename>`. An empty/None folder drops the file straight into
+  `base`; an empty/None base falls back to the Dropbox root — so an unset folder
+  reproduces the previous single-directory behaviour (backward compatible).
+
 - **[F-009] Excel style helpers.** `style_header(ws, n_cols)` applies the shared
   header style (bold white on dark fill, centred, frozen first row);
   `set_widths(ws, widths)` sets column widths; the module exposes the shared

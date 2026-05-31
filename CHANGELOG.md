@@ -8,6 +8,17 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-31
+
+### Added
+
+- **F-010** `build_remote_path(base, folder, filename)` joins an optional base
+  directory, an optional sub-folder and a filename into one Dropbox path
+  (slashes normalised). Lets a family of routines share one `DROPBOX_PATH` base
+  while each writes into its own `<PREFIX>_DROPBOX_FOLDER` sub-folder. An unset
+  folder reproduces the previous single-directory behaviour, so the change is
+  backward compatible. Additive — no existing name changes.
+
 ## [0.2.0] - 2026-05-31
 
 ### Changed
