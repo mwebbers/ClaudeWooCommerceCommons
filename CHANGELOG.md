@@ -8,6 +8,16 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-31
+
+### Changed
+
+- **F-001** `env_required` / `env_opt` gain an optional `prefix` keyword and now
+  resolve a variable by trying `<prefix>_<key>` first, then the unprefixed
+  `<key>` (plain `<key>` with no prefix — backward compatible). Enables a family
+  of routines to share one environment: shared values set once unprefixed,
+  per-routine values set prefixed. See ClaudeCodeStructure v0.6.0.
+
 ## [0.1.1] - 2026-05-31
 
 ### Changed

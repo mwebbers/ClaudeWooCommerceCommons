@@ -54,6 +54,37 @@ def test_env_opt_default(monkeypatch):
     assert C.env_opt("MAYBE", "fallback") == "x"
 
 
+@pytest.mark.feature("F-001")
+def test_env_prefix_with_fallback(monkeypatch):
+    for k in ("WC_URL", "STOCK_WC_URL", "STOCK_KNOB", "KNOB"):
+        monkeypatch.delenv(k, raising=False)
+    # Prefixed value wins when set.
+    monkeypatch.setenv("STOCK_WC_URL", "https://prefixed")
+    monkeypatch.setenv("WC_URL", "https://shared")
+    assert C.env_required("WC_URL", prefix="STOCK") == "https://prefixed"
+    # Falls back to the shared unprefixed value when the prefixed one is absent.
+    monkeypatch.delenv("STOCK_WC_URL", raising=False)
+    assert C.env_required("WC_URL", prefix="STOCK") == "https://shared"
+    # env_opt: prefixed override, else unprefixed, else default.
+    monkeypatch.setenv("STOCK_KNOB", "10")
+    assert C.env_opt("KNOB", "0", prefix="STOCK") == "10"
+    monkeypatch.delenv("STOCK_KNOB", raising=False)
+    monkeypatch.setenv("KNOB", "5")
+    assert C.env_opt("KNOB", "0", prefix="STOCK") == "5"
+    monkeypatch.delenv("KNOB", raising=False)
+    assert C.env_opt("KNOB", "0", prefix="STOCK") == "0"
+
+
+@pytest.mark.feature("F-001")
+def test_env_required_missing_names_both_forms(monkeypatch):
+    monkeypatch.delenv("WC_URL", raising=False)
+    monkeypatch.delenv("STOCK_WC_URL", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        C.env_required("WC_URL", prefix="STOCK")
+    msg = str(exc.value)
+    assert "WC_URL" in msg and "STOCK_WC_URL" in msg
+
+
 # ---------------------------------------------------------------------------
 # F-002 Tolerant number parsing
 # ---------------------------------------------------------------------------

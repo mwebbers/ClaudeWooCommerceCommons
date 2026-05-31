@@ -37,20 +37,41 @@ from openpyxl.utils import get_column_letter
 # ---------------------------------------------------------------------------
 
 
-def env_required(key: str) -> str:
-    """Return a required env var, stripped. Aborts the run with a clear
-    SystemExit naming the variable when it is missing or empty. Reports never
-    fall back to a placeholder value for a credential or shop URL."""
-    v = os.environ.get(key, "").strip()
+def _env_lookup(key: str, prefix: str) -> str | None:
+    """Project-prefix-with-fallback lookup: try `<prefix>_<key>` first, then the
+    unprefixed `<key>`. Returns the first set & non-empty (stripped) value, or
+    None. With no prefix this is a plain `<key>` lookup (backward compatible).
+
+    This lets a family of routines share one environment: shared values
+    (credentials, tokens, common knobs) are set once unprefixed and reached via
+    the fallback, while per-routine values are set prefixed so they never
+    collide. See ClaudeCodeStructure → CLAUDE.md "Environment variables".
+    """
+    names = (f"{prefix}_{key}", key) if prefix else (key,)
+    for name in names:
+        v = os.environ.get(name, "").strip()
+        if v:
+            return v
+    return None
+
+
+def env_required(key: str, *, prefix: str = "") -> str:
+    """Return a required env var, stripped, using the project-prefix-with-fallback
+    lookup. Aborts the run with a clear SystemExit naming the variable when
+    neither the prefixed nor the unprefixed form is set. Reports never fall back
+    to a placeholder value for a credential or shop URL."""
+    v = _env_lookup(key, prefix)
     if not v:
-        raise SystemExit(f"Missing required env var: {key}")
+        suffix = f" (or {prefix}_{key})" if prefix else ""
+        raise SystemExit(f"Missing required env var: {key}{suffix}")
     return v
 
 
-def env_opt(key: str, default: str | None = None) -> str | None:
-    """Return an optional env var, stripped, or `default` when unset/empty."""
-    v = os.environ.get(key, "").strip()
-    return v if v else default
+def env_opt(key: str, default: str | None = None, *, prefix: str = "") -> str | None:
+    """Return an optional env var, stripped, using the project-prefix-with-
+    fallback lookup, or `default` when neither form is set/non-empty."""
+    v = _env_lookup(key, prefix)
+    return v if v is not None else default
 
 
 # ---------------------------------------------------------------------------

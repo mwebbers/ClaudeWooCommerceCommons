@@ -30,11 +30,15 @@ keeps each consumer thin: it imports the client and adds only its own report.
 Each feature is testable. The ID in brackets is referenced by tests via
 `@pytest.mark.feature("F-00X")`.
 
-- **[F-001] Environment helpers.** `env_required(key)` returns the stripped
-  value of an env var and aborts the run with a clear `SystemExit` naming the
-  variable when it is missing or empty — it never returns a placeholder.
-  `env_opt(key, default)` returns the stripped value or `default` when
-  unset/empty.
+- **[F-001] Environment helpers with project-prefix fallback.** `env_required(key,
+  *, prefix="")` and `env_opt(key, default, *, prefix="")` resolve a variable by
+  trying `<prefix>_<key>` first and falling back to the unprefixed `<key>`
+  (plain `<key>` when no prefix is given — backward compatible). `env_required`
+  aborts with a clear `SystemExit` naming the variable when neither form is set;
+  `env_opt` returns `default`. This lets a family of routines share one
+  environment: shared values set once unprefixed, per-routine values set prefixed
+  so they never collide (see ClaudeCodeStructure → CLAUDE.md "Environment
+  variables").
 
 - **[F-002] Tolerant number parsing.** `parse_num()` accepts comma thousands
   separators (`"1,234"` → `1234.0`), plain numbers and numeric strings, and
