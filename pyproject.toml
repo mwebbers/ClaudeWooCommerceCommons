@@ -4,9 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-woocommerce-commons"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared, vendor-agnostic WooCommerce REST client and reporting helpers (paginated client, parsing, ISO-week windows, Dropbox upload, Excel styling) for WooCommerce reporting routines"
-requires-python = ">=3.12"
+# 3.9+ — the code targets a broad floor so it installs in older runtimes
+# (e.g. a Python 3.11 scheduled-task sandbox). Verified on 3.9 and 3.12.
+requires-python = ">=3.9"
 dependencies = [
     "requests>=2.31,<3",
     "openpyxl>=3.1,<4",

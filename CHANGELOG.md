@@ -8,6 +8,14 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-31
+
+### Changed
+
+- Lower `requires-python` from `>=3.12` to `>=3.9` so the package installs in
+  older runtimes (a scheduled-task sandbox runs Python 3.11). No code change —
+  the suite already passed on 3.9 and 3.12.
+
 ## [0.1.0] - 2026-05-31
 
 Initial release: the shared WooCommerce client and reporting helpers, packaged
