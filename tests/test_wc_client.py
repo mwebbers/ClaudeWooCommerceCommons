@@ -1,7 +1,9 @@
 """Tests for the shared WooCommerce client.
 
 Every test is tagged with the SCOPE.md feature it covers. All network is mocked
-— the suite never touches a real shop or Dropbox.
+— the suite never touches a real shop or Dropbox. The generic helpers are tested
+in `claude-code-commons`; here F-011 only checks they remain importable from
+`wc_client` (back-compat).
 """
 
 from datetime import date, datetime, timezone
@@ -29,74 +31,6 @@ class FakeResp:
     def raise_for_status(self):
         if self.status_code >= 400:
             raise requests.HTTPError(response=self)
-
-
-# ---------------------------------------------------------------------------
-# F-001 Environment helpers
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.feature("F-001")
-def test_env_required_present_and_missing(monkeypatch):
-    monkeypatch.setenv("THING", "  value  ")
-    assert C.env_required("THING") == "value"
-    monkeypatch.delenv("THING", raising=False)
-    with pytest.raises(SystemExit) as exc:
-        C.env_required("THING")
-    assert "THING" in str(exc.value)
-
-
-@pytest.mark.feature("F-001")
-def test_env_opt_default(monkeypatch):
-    monkeypatch.delenv("MAYBE", raising=False)
-    assert C.env_opt("MAYBE", "fallback") == "fallback"
-    monkeypatch.setenv("MAYBE", "x")
-    assert C.env_opt("MAYBE", "fallback") == "x"
-
-
-@pytest.mark.feature("F-001")
-def test_env_prefix_with_fallback(monkeypatch):
-    for k in ("WC_URL", "STOCK_WC_URL", "STOCK_KNOB", "KNOB"):
-        monkeypatch.delenv(k, raising=False)
-    # Prefixed value wins when set.
-    monkeypatch.setenv("STOCK_WC_URL", "https://prefixed")
-    monkeypatch.setenv("WC_URL", "https://shared")
-    assert C.env_required("WC_URL", prefix="STOCK") == "https://prefixed"
-    # Falls back to the shared unprefixed value when the prefixed one is absent.
-    monkeypatch.delenv("STOCK_WC_URL", raising=False)
-    assert C.env_required("WC_URL", prefix="STOCK") == "https://shared"
-    # env_opt: prefixed override, else unprefixed, else default.
-    monkeypatch.setenv("STOCK_KNOB", "10")
-    assert C.env_opt("KNOB", "0", prefix="STOCK") == "10"
-    monkeypatch.delenv("STOCK_KNOB", raising=False)
-    monkeypatch.setenv("KNOB", "5")
-    assert C.env_opt("KNOB", "0", prefix="STOCK") == "5"
-    monkeypatch.delenv("KNOB", raising=False)
-    assert C.env_opt("KNOB", "0", prefix="STOCK") == "0"
-
-
-@pytest.mark.feature("F-001")
-def test_env_required_missing_names_both_forms(monkeypatch):
-    monkeypatch.delenv("WC_URL", raising=False)
-    monkeypatch.delenv("STOCK_WC_URL", raising=False)
-    with pytest.raises(SystemExit) as exc:
-        C.env_required("WC_URL", prefix="STOCK")
-    msg = str(exc.value)
-    assert "WC_URL" in msg and "STOCK_WC_URL" in msg
-
-
-# ---------------------------------------------------------------------------
-# F-002 Tolerant number parsing
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.feature("F-002")
-@pytest.mark.parametrize("raw,expected", [
-    ("1,234", 1234.0), ("12.5", 12.5), (None, 0.0), ("", 0.0),
-    ("garbage", 0.0), (7, 7.0), ([], 0.0),
-])
-def test_parse_num(raw, expected):
-    assert C.parse_num(raw) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +106,7 @@ def test_4xx_not_retried(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# F-005 Pagination + MAX_PAGES
+# F-005 Pagination + MAX_PAGES + truncation flag
 # ---------------------------------------------------------------------------
 
 
@@ -184,11 +118,21 @@ def test_paged_max_pages_cap(monkeypatch):
 
 
 @pytest.mark.feature("F-005")
+def test_paged_sets_truncated_flag_on_cap(monkeypatch):
+    client = _client(per_page=1, max_pages=2)
+    monkeypatch.setattr(client, "get_with_retry", lambda url, params=None: FakeResp([{"x": 1}]))
+    assert client.truncated is False
+    list(client.paged("/products"))
+    assert client.truncated is True  # cap hit -> caller can detect truncation
+
+
+@pytest.mark.feature("F-005")
 def test_paged_stops_on_short_page(monkeypatch):
     client = _client(per_page=10, max_pages=50)
     monkeypatch.setattr(client, "get_with_retry",
                         lambda url, params=None: FakeResp([{"x": 1}, {"x": 2}]))
     assert len(list(client.paged("/orders"))) == 2  # short page ends pagination
+    assert client.truncated is False                # natural end -> not truncated
 
 
 @pytest.mark.feature("F-005")
@@ -199,15 +143,8 @@ def test_paged_stops_on_empty(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# F-006 Currency
+# F-006 Shop-currency detection
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.feature("F-006")
-def test_currency_symbol():
-    assert C.currency_symbol("EUR") == "€"
-    assert C.currency_symbol("usd") == "$"
-    assert C.currency_symbol("XYZ") == "XYZ"  # unmapped -> code itself
 
 
 @pytest.mark.feature("F-006")
@@ -296,26 +233,6 @@ def test_upload_to_dropbox_failure(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# F-010 Dropbox remote-path builder
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.feature("F-010")
-@pytest.mark.parametrize("base,folder,expected", [
-    ("/Reports", "Stock", "/Reports/Stock/r.xlsx"),
-    ("/Reports/", "Stock", "/Reports/Stock/r.xlsx"),   # trailing slash on base
-    ("/Reports", "", "/Reports/r.xlsx"),               # empty folder -> into base
-    ("/Reports", None, "/Reports/r.xlsx"),             # unset folder -> into base
-    (None, "Stock", "/Stock/r.xlsx"),                  # no base -> folder at root
-    ("", "", "/r.xlsx"),                               # both empty -> root (old behaviour)
-    (None, None, "/r.xlsx"),
-    ("/a/b/", "/c/d/", "/a/b/c/d/r.xlsx"),             # nested + stray slashes normalised
-])
-def test_build_remote_path(base, folder, expected):
-    assert C.build_remote_path(base, folder, "r.xlsx") == expected
-
-
-# ---------------------------------------------------------------------------
 # F-009 Excel helpers
 # ---------------------------------------------------------------------------
 
@@ -334,3 +251,25 @@ def test_excel_helpers():
     assert ws.column_dimensions["B"].width == 20
     # Shared fills exposed for the reports.
     assert C.RED is not None and C.GREEN is not None and C.HEADER_FILL is not None
+
+
+# ---------------------------------------------------------------------------
+# F-011 Re-exports of the vendor-agnostic core (back-compat)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.feature("F-011")
+def test_reexports_core_helpers(monkeypatch):
+    # The generic helpers remain importable from wc_client and behave as before.
+    from wc_client import (CURRENCY_SYMBOLS, build_remote_path, currency_symbol,
+                           env_get, env_opt, env_required, log, parse_num)
+
+    assert parse_num("1,234") == 1234.0
+    assert currency_symbol("EUR") == "€"
+    assert "EUR" in CURRENCY_SYMBOLS
+    assert build_remote_path("/Reports", "Stock", "r.xlsx") == "/Reports/Stock/r.xlsx"
+    monkeypatch.setenv("WC_URL", "https://x")
+    assert env_required("WC_URL") == "https://x"
+    assert env_opt("MISSING", "d") == "d"
+    assert env_get("MISSING", "d") == "d"
+    assert callable(log)

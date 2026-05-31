@@ -2,17 +2,25 @@
 """
 Shared WooCommerce REST helpers.
 
-This module is a self-contained, vendor-agnostic toolkit for WooCommerce
-reporting routines. It is deliberately a standalone
-file with no dependency on any one report's Config; it now lives in the shared
-`ClaudeWooCommerceCommons` package (distribution `claude-woocommerce-commons`).
+This module is the WooCommerce-specific toolkit for reporting routines: an
+authenticated, paginated REST client with retry/backoff, tolerant WC `meta_data`
+parsing, shop-currency detection, ISO-week reporting windows, a Dropbox upload
+and Excel styling. It lives in the shared `ClaudeWooCommerceCommons` package
+(distribution `claude-woocommerce-commons`, import `wc_client`).
+
+The generic, vendor-agnostic helpers — `env_required` / `env_opt` / `env_get`,
+`parse_num`, `currency_symbol`, `build_remote_path`, `log` — live in the
+dependency-light `claude-code-commons` package and are **re-exported here**, so
+existing `from wc_client import env_required, parse_num, ...` keeps working
+unchanged.
 
 What lives here:
-  - parse_num / meta_get  — tolerant parsing of the mixed types WC returns
+  - meta_get              — tolerant parsing of WooCommerce `meta_data`
   - WooClient             — authenticated, paginated REST client with a
-                            retry-with-backoff layer for transient failures
-  - currency detection    — read the shop currency from /system_status
-  - Dropbox upload        — refresh-token OAuth upload (overwrite, muted)
+                            retry-with-backoff layer and a truncation flag
+  - detect_shop_currency  — read the shop currency from /system_status
+  - iso_week_windows      — ISO-week-aligned current/prior reporting windows
+  - upload_to_dropbox     — refresh-token OAuth upload (overwrite, muted)
   - Excel style helpers   — shared header styling / column widths
 
 Nothing here is store-specific. Reports build on top of it.
@@ -21,7 +29,6 @@ Nothing here is store-specific. Reports build on top of it.
 from __future__ import annotations
 
 import json
-import os
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -31,68 +38,23 @@ import requests
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-
-# ---------------------------------------------------------------------------
-# Env helpers
-# ---------------------------------------------------------------------------
-
-
-def _env_lookup(key: str, prefix: str) -> str | None:
-    """Project-prefix-with-fallback lookup: try `<prefix>_<key>` first, then the
-    unprefixed `<key>`. Returns the first set & non-empty (stripped) value, or
-    None. With no prefix this is a plain `<key>` lookup (backward compatible).
-
-    This lets a family of routines share one environment: shared values
-    (credentials, tokens, common knobs) are set once unprefixed and reached via
-    the fallback, while per-routine values are set prefixed so they never
-    collide. See ClaudeCodeStructure → CLAUDE.md "Environment variables".
-    """
-    names = (f"{prefix}_{key}", key) if prefix else (key,)
-    for name in names:
-        v = os.environ.get(name, "").strip()
-        if v:
-            return v
-    return None
-
-
-def env_required(key: str, *, prefix: str = "") -> str:
-    """Return a required env var, stripped, using the project-prefix-with-fallback
-    lookup. Aborts the run with a clear SystemExit naming the variable when
-    neither the prefixed nor the unprefixed form is set. Reports never fall back
-    to a placeholder value for a credential or shop URL."""
-    v = _env_lookup(key, prefix)
-    if not v:
-        suffix = f" (or {prefix}_{key})" if prefix else ""
-        raise SystemExit(f"Missing required env var: {key}{suffix}")
-    return v
-
-
-def env_opt(key: str, default: str | None = None, *, prefix: str = "") -> str | None:
-    """Return an optional env var, stripped, using the project-prefix-with-
-    fallback lookup, or `default` when neither form is set/non-empty."""
-    v = _env_lookup(key, prefix)
-    return v if v is not None else default
+# Generic, vendor-agnostic helpers live in the dependency-light core package and
+# are re-exported so consumers keep importing them from `wc_client` unchanged.
+from code_commons import (  # noqa: F401  (re-exported for backward compatibility)
+    CURRENCY_SYMBOLS,
+    build_remote_path,
+    currency_symbol,
+    env_get,
+    env_opt,
+    env_required,
+    log,
+    parse_num,
+)
 
 
 # ---------------------------------------------------------------------------
-# Tolerant parsing
+# Tolerant WooCommerce meta parsing
 # ---------------------------------------------------------------------------
-
-
-def parse_num(v: Any) -> float:
-    """Parse the mixed numeric types WooCommerce returns in JSON.
-
-    Accepts plain numbers, numeric strings, and strings with comma thousands
-    separators ("1,234" -> 1234.0). Returns 0.0 for None, "", or anything
-    unparseable — it never raises, which is what lets the rest of the code
-    treat WC's loose typing uniformly.
-    """
-    if v is None or v == "":
-        return 0.0
-    try:
-        return float(str(v).replace(",", ""))
-    except (ValueError, TypeError):
-        return 0.0
 
 
 def meta_get(meta_list: list | None, *keys: str) -> Any:
@@ -115,29 +77,9 @@ def meta_get(meta_list: list | None, *keys: str) -> Any:
     return None
 
 
-def log(msg: str) -> None:
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
-
-
 # ---------------------------------------------------------------------------
-# Currency helpers
+# Currency detection (WooCommerce /system_status)
 # ---------------------------------------------------------------------------
-
-# Known currency code -> display symbol. Codes not in the table fall back to
-# the 3-letter code itself, which is always valid in Excel number formats.
-CURRENCY_SYMBOLS = {
-    "EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF",
-    "DKK": "kr", "SEK": "kr", "NOK": "kr", "ISK": "kr",
-    "JPY": "¥", "CNY": "¥",
-    "CAD": "$", "AUD": "$", "NZD": "$", "HKD": "$",
-    "PLN": "zł", "CZK": "Kč", "HUF": "Ft",
-}
-
-
-def currency_symbol(code: str) -> str:
-    """Return a display symbol for a 3-letter currency code, falling back to
-    the code itself for currencies we have not mapped."""
-    return CURRENCY_SYMBOLS.get((code or "").upper(), (code or "").upper())
 
 
 def detect_shop_currency(client: "WooClient") -> str:
@@ -168,7 +110,7 @@ class WooClient:
     """Authenticated, paginated WooCommerce REST v3 client.
 
     Parameter-based (not coupled to any report's Config) so it can be reused
-    across routines and later extracted into a shared package unchanged.
+    across routines.
     """
 
     def __init__(
@@ -191,6 +133,10 @@ class WooClient:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_backoff_base = retry_backoff_base
+        # F-005: set True when any paged() call stops at max_pages, so a caller
+        # can tell a truncated result from a naturally-exhausted one and flag the
+        # report as incomplete — a silent truncation would under-count silently.
+        self.truncated = False
 
     def get_with_retry(self, url: str, params: dict | None = None):
         """GET with retry-with-backoff for transient errors.
@@ -231,13 +177,15 @@ class WooClient:
 
     def paged(self, path: str, params: dict | None = None) -> Iterator[dict]:
         """Yield every item across pages of a WC list endpoint, stopping after
-        `max_pages` with a clear warning so a runaway loop or a much larger
-        dataset is visible rather than a silent hang."""
+        `max_pages` with a clear warning AND setting `self.truncated = True`, so a
+        runaway loop or a much larger dataset is both visible and *detectable* by
+        the caller rather than a silent under-count."""
         params = dict(params or {})
         params["per_page"] = self.per_page
         page = 1
         while True:
             if page > self.max_pages:
+                self.truncated = True
                 log(f"WARNING: reached MAX_PAGES={self.max_pages} on {path}. "
                     "Increase MAX_PAGES if your dataset is larger.")
                 return
@@ -302,25 +250,6 @@ def upload_to_dropbox(
     )
     r.raise_for_status()
     return r.json().get("path_display", remote_path)
-
-
-def build_remote_path(base: str | None, folder: str | None, filename: str) -> str:
-    """Join an optional base directory, an optional sub-folder and a filename
-    into a Dropbox remote path.
-
-    Lets a family of routines share one base (`DROPBOX_PATH`) while each writes
-    into its own sub-folder (`<PREFIX>_DROPBOX_FOLDER`): e.g.
-    base ``/Reports`` + folder ``Stock`` -> ``/Reports/Stock/<filename>``. An
-    empty/None folder drops the files straight into `base`, and an empty/None
-    base falls back to the Dropbox root — so leaving the folder unset reproduces
-    the old single-directory behaviour. Slashes are normalised, so a trailing or
-    duplicate ``/`` in either segment does not matter.
-    """
-    parts: list[str] = []
-    for seg in (base, folder):
-        if seg:
-            parts += [p for p in seg.strip("/").split("/") if p]
-    return ("/" + "/".join(parts) + "/" + filename) if parts else "/" + filename
 
 
 # ---------------------------------------------------------------------------

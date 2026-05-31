@@ -8,6 +8,33 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-31
+
+Split out the vendor-agnostic core (review thread T-1 / option C) and harden the
+client. The generic helpers now live in `claude-code-commons` and are re-exported
+here, so consumers' `from wc_client import ...` is unchanged.
+
+### Changed
+- **Depends on `claude-code-commons` (@v0.1.0).** `env_required` / `env_opt` /
+  `env_get`, `parse_num`, `currency_symbol` / `CURRENCY_SYMBOLS`,
+  `build_remote_path` and `log` moved to that dependency-light, standard-library-
+  only core and are re-exported from `wc_client` (F-011) — no name changes, no
+  behaviour changes. This lets non-WooCommerce routines (e.g. the asset repos)
+  share the same helpers without installing `requests`/`openpyxl`.
+- **F-005** `WooClient.paged` now sets `WooClient.truncated = True` when it stops
+  at `max_pages`, so a caller can detect a truncated (under-counted) result
+  instead of only seeing a log warning (review finding CM-1).
+- CI now runs a `3.9` / `3.11` / `3.12` matrix (was a single `3.12`), so the
+  advertised `>=3.9` floor and the Python 3.11 sandbox are actually tested
+  (review finding CM-3).
+
+### Removed
+- The generic helpers' source (now imported from `claude-code-commons`); their
+  SCOPE features F-001 (env), F-002 (`parse_num`), F-010 (`build_remote_path`) and
+  the `currency_symbol` half of F-006 moved to the core. The private
+  `ClaudeCodeStructure` reference in the env docstring/SCOPE went with them,
+  closing a public-repo name leak (review finding CM-6).
+
 ## [0.3.0] - 2026-05-31
 
 ### Added
