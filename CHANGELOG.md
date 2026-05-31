@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to this package are documented here. Each behaviour change
+references the SCOPE.md feature ID(s) it implements.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/), and the
+project adheres to semantic versioning.
+
+## [Unreleased]
+
+## [0.1.0] - 2026-05-31
+
+Initial release: the shared WooCommerce client and reporting helpers, packaged
+for reuse across WooCommerce reporting routines.
+
+### Added
+
+- **F-001** `env_required` / `env_opt` environment helpers.
+- **F-002** Tolerant `parse_num()`.
+- **F-003** Tolerant `meta_get()` (skips non-dict meta entries).
+- **F-004** `WooClient.get_with_retry` retry-with-backoff (5xx/429/connection
+  retried; other 4xx not).
+- **F-005** `WooClient.paged` pagination with a `MAX_PAGES` safety net.
+- **F-006** `currency_symbol` + `detect_shop_currency` (fail-soft to EUR).
+- **F-007** `iso_week_windows` ISO-week-aligned current/prior windows with a
+  week-53 clamp.
+- **F-008** `upload_to_dropbox` (refresh-token OAuth, overwrite, muted).
+- **F-009** Excel style helpers (`style_header`, `set_widths`, shared fills/fonts).

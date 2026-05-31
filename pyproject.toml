@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-woocommerce-commons"
+version = "0.1.0"
+description = "Shared, vendor-agnostic WooCommerce REST client and reporting helpers (paginated client, parsing, ISO-week windows, Dropbox upload, Excel styling) for WooCommerce reporting routines"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31,<3",
+    "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+# A single top-level module, `wc_client`, living under src/. Installing this
+# package makes `from wc_client import WooClient, parse_num, ...` work in the
+# consuming routines.
+[tool.setuptools]
+py-modules = ["wc_client"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "feature: link a test to a SCOPE.md feature ID, e.g. feature('F-001')",
+]
