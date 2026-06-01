@@ -262,7 +262,8 @@ def test_excel_helpers():
 def test_reexports_core_helpers(monkeypatch):
     # The generic helpers remain importable from wc_client and behave as before.
     from wc_client import (CURRENCY_SYMBOLS, build_remote_path, currency_symbol,
-                           env_get, env_opt, env_required, log, parse_num)
+                           env_float, env_get, env_int, env_opt, env_required, log,
+                           parse_num)
 
     assert parse_num("1,234") == 1234.0
     assert currency_symbol("EUR") == "€"
@@ -272,4 +273,20 @@ def test_reexports_core_helpers(monkeypatch):
     assert env_required("WC_URL") == "https://x"
     assert env_opt("MISSING", "d") == "d"
     assert env_get("MISSING", "d") == "d"
+    # env_int/env_float are now re-exported too (core F-006).
+    monkeypatch.setenv("PAGES", "200")
+    assert env_int("PAGES", 50) == 200
+    assert env_float("RATE", 1.0) == 1.0
     assert callable(log)
+
+
+@pytest.mark.feature("F-011")
+def test_reexported_shared_flag_passthrough(monkeypatch):
+    # The core `shared` flag (F-001/F-007) passes through the re-export: a prefixed
+    # routine-own key ignores the plain form, while shared=True still falls back.
+    from wc_client import env_opt
+    for k in ("KNOB", "STOCK_KNOB"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("KNOB", "plain")
+    assert env_opt("KNOB", "def", prefix="STOCK") == "def"            # prefix-required
+    assert env_opt("KNOB", "def", prefix="STOCK", shared=True) == "plain"  # shared fallback

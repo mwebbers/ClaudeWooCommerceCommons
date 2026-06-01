@@ -8,6 +8,20 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-01
+
+### Changed
+- Bumped the `claude-code-commons` pin to `v0.3.0`, which makes the env helpers
+  **prefix-required by default** for routine-own keys: with a prefix set, the
+  unprefixed fallback now applies only when `shared=True`. Consuming routines mark
+  their family-shared creds (`WC_*`, `DROPBOX_*`) `shared=True`. The `shared` flag
+  passes through the re-exported helpers transparently.
+
+### Added
+- **[F-011]** `env_int` and `env_float` are now re-exported from `wc_client`
+  alongside the other core helpers, so routines can drop their local `_int`/`_float`
+  helpers and use the shared, tested implementation.
+
 ## [0.4.0] - 2026-05-31
 
 Split out the vendor-agnostic core (review thread T-1 / option C) and harden the

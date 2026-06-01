@@ -78,11 +78,12 @@ Each feature is testable. The ID in brackets is referenced by tests via
   consistent.
 
 - **[F-011] Re-exports the vendor-agnostic core.** The generic helpers from
-  `claude-code-commons` — `env_required`, `env_opt`, `env_get`, `parse_num`,
-  `currency_symbol`, `CURRENCY_SYMBOLS`, `build_remote_path`, `log` — are
-  importable from `wc_client` unchanged, so a consumer gets generic + WooCommerce
-  helpers from one import surface and an existing `from wc_client import
-  parse_num, ...` keeps working.
+  `claude-code-commons` — `env_required`, `env_opt`, `env_get`, `env_int`,
+  `env_float`, `parse_num`, `currency_symbol`, `CURRENCY_SYMBOLS`,
+  `build_remote_path`, `log` — are importable from `wc_client` unchanged, so a
+  consumer gets generic + WooCommerce helpers from one import surface and an
+  existing `from wc_client import parse_num, ...` keeps working. The env helpers'
+  `shared` flag (defined in the core package) passes through transparently.
 
 ## Out of scope
 
