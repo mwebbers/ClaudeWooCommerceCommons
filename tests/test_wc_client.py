@@ -290,3 +290,48 @@ def test_reexported_shared_flag_passthrough(monkeypatch):
     monkeypatch.setenv("KNOB", "plain")
     assert env_opt("KNOB", "def", prefix="STOCK") == "def"            # prefix-required
     assert env_opt("KNOB", "def", prefix="STOCK", shared=True) == "plain"  # shared fallback
+
+
+# ---------------------------------------------------------------------------
+# F-012 / F-013 / F-014 Goal / KPI arithmetic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.feature("F-012")
+def test_yoy_pct():
+    assert C.yoy_pct(150, 100) == 50.0
+    assert C.yoy_pct(0, 100) == -100.0      # lost all revenue -> -100, defined
+    assert C.yoy_pct(100, 0) is None        # new seller -> undefined, no infinite spike
+    assert C.yoy_pct(100, -5) is None       # negative prior is also undefined
+
+
+@pytest.mark.feature("F-013")
+def test_house_brand_share():
+    curr = {"HuisMerk": 300.0, "Other": 700.0}
+    prev = {"HuisMerk": 200.0, "Other": 800.0}
+    r = C.house_brand_share(curr, prev, "huismerk")   # case-insensitive label match
+    assert r["hb_curr"] == 300.0 and r["total_curr"] == 1000.0
+    assert r["hb_share_curr"] == 30.0
+    assert r["hb_share_prev"] == 20.0
+    # No/empty label -> zero house-brand revenue; share undefined on a zero total.
+    assert C.house_brand_share(curr, prev, None)["hb_curr"] == 0.0
+    assert C.house_brand_share({}, {}, "huismerk")["hb_share_curr"] is None
+
+
+@pytest.mark.feature("F-014")
+def test_revenue_goal():
+    # Growth-% target takes precedence over an absolute target. Kernel values are
+    # unrounded by design (the caller rounds), so compare with approx.
+    g = C.revenue_goal(660, 500, target_growth_pct=20.0, target_absolute=9999.0)
+    assert g["revenue_target"] == pytest.approx(600.0)       # 500 * 1.2, growth wins
+    assert g["revenue_target_pct"] == pytest.approx(110.0)    # 660 / 600 * 100
+    assert g["revenue_yoy"] == pytest.approx(32.0)
+    assert "vs prior year" in g["revenue_target_basis"]
+    # Absolute target when no growth-% is given.
+    a = C.revenue_goal(800, 500, target_absolute=1000.0)
+    assert a["revenue_target"] == 1000.0
+    assert a["revenue_target_pct"] == pytest.approx(80.0)
+    assert a["revenue_target_basis"] == "absolute"
+    # No target -> undefined; a growth target needs a positive prior.
+    assert C.revenue_goal(800, 500)["revenue_target"] is None
+    assert C.revenue_goal(800, 0, target_growth_pct=20.0)["revenue_target"] is None

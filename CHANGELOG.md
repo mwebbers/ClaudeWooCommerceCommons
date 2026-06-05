@@ -8,6 +8,16 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-05
+
+### Added
+- **[F-012] / [F-013] / [F-014]** Generic, parameterised goal/KPI arithmetic in
+  `wc_client` — `yoy_pct`, `house_brand_share`, `revenue_goal` — so the sales and
+  marketing routines compute year-over-year %, house-brand revenue share and
+  revenue-vs-target from one shared definition. The helpers hold no shop-specific
+  brand names or meta keys (the house-brand label and targets are passed in by the
+  caller). Additive; existing imports are unaffected.
+
 ## [0.5.0] - 2026-06-01
 
 ### Changed

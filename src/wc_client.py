@@ -338,6 +338,89 @@ def iso_week_windows(weeks: int, now: "datetime | None" = None) -> tuple[Window,
 
 
 # ---------------------------------------------------------------------------
+# Goal / KPI arithmetic
+# ---------------------------------------------------------------------------
+# Pure, parameterised analytics shared by the reporting routines so the same
+# goal numbers are computed identically everywhere: one definition of
+# "year-over-year %", "house-brand revenue share" and "revenue vs target". They
+# take plain numbers / {brand: revenue} maps and a house-brand *label* — no brand
+# name or shop-specific meta key is baked in, so they stay vendor-agnostic. The
+# caller owns rounding and presentation.
+
+
+def yoy_pct(curr: float, prev: float) -> "float | None":
+    """Year-over-year percentage: ``(curr - prev) / prev * 100``.
+
+    Returns ``None`` when the prior is 0 or negative — growth is undefined for a
+    genuinely new seller rather than an infinite spike. Naturally yields ``-100``
+    when ``curr`` is 0 and ``prev`` > 0.
+    """
+    if prev <= 0:
+        return None
+    return (curr - prev) / prev * 100
+
+
+def house_brand_share(
+    curr_by_brand: "dict[str, float]",
+    prev_by_brand: "dict[str, float]",
+    house_brand: "str | None",
+) -> dict:
+    """House-brand revenue and its share of total revenue, for a current and a
+    prior window, from two ``{brand: revenue}`` maps.
+
+    The house brand is matched by a single case-insensitive label
+    (``.strip().lower()``) — no brand name is hard-coded here; the caller passes
+    the configured label. An empty/``None`` label yields zero house-brand revenue.
+    Shares are ``None`` when the corresponding total is 0 (undefined, not zero).
+    Values are returned unrounded; the caller rounds for display.
+    """
+    hb = (house_brand or "").strip().lower()
+    total_curr = sum(curr_by_brand.values())
+    total_prev = sum(prev_by_brand.values())
+    hb_curr = sum(v for k, v in curr_by_brand.items() if k.strip().lower() == hb) if hb else 0.0
+    hb_prev = sum(v for k, v in prev_by_brand.items() if k.strip().lower() == hb) if hb else 0.0
+    return {
+        "total_curr": total_curr,
+        "total_prev": total_prev,
+        "hb_curr": hb_curr,
+        "hb_prev": hb_prev,
+        "hb_share_curr": (hb_curr / total_curr * 100) if total_curr > 0 else None,
+        "hb_share_prev": (hb_prev / total_prev * 100) if total_prev > 0 else None,
+    }
+
+
+def revenue_goal(
+    total_curr: float,
+    total_prev: float,
+    *,
+    target_growth_pct: "float | None" = None,
+    target_absolute: "float | None" = None,
+) -> dict:
+    """Revenue versus target for one window.
+
+    A growth-% target (``total_prev * (1 + pct/100)``) takes precedence over an
+    absolute target; with neither, the target is undefined. A growth target needs
+    a positive prior to resolve. ``revenue_target_pct`` is the share of target
+    achieved (``curr / target * 100``). Values are unrounded; the caller rounds.
+    """
+    revenue_yoy = yoy_pct(total_curr, total_prev)
+    if target_growth_pct is not None:
+        target = total_prev * (1 + target_growth_pct / 100) if total_prev > 0 else None
+        basis = f"+{target_growth_pct:g}% vs prior year"
+    elif target_absolute is not None:
+        target = target_absolute
+        basis = "absolute"
+    else:
+        target, basis = None, None
+    return {
+        "revenue_yoy": revenue_yoy,
+        "revenue_target": target,
+        "revenue_target_basis": basis,
+        "revenue_target_pct": (total_curr / target * 100) if target else None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Excel style helpers
 # ---------------------------------------------------------------------------
 

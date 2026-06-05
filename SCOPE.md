@@ -85,13 +85,39 @@ Each feature is testable. The ID in brackets is referenced by tests via
   existing `from wc_client import parse_num, ...` keeps working. The env helpers'
   `shared` flag (defined in the core package) passes through transparently.
 
+- **[F-012] Year-over-year percentage.** `yoy_pct(curr, prev)` returns
+  `(curr - prev) / prev * 100`, or `None` when `prev <= 0` (growth is undefined
+  for a genuinely new seller rather than an infinite spike; it naturally yields
+  `-100` when `curr` is 0 and `prev > 0`). A pure, parameterised helper shared so
+  every routine computes YoY identically.
+
+- **[F-013] House-brand revenue share.** `house_brand_share(curr_by_brand,
+  prev_by_brand, house_brand)` takes two `{brand: revenue}` maps and a single
+  house-brand *label*, and returns house-brand revenue and its share of total
+  revenue for both windows (`hb_curr`/`hb_prev`/`total_curr`/`total_prev`/
+  `hb_share_curr`/`hb_share_prev`). The brand is matched case-insensitively
+  (`.strip().lower()`); **no brand name is hard-coded** — the caller passes the
+  configured label, and an empty/`None` label yields zero house-brand revenue.
+  Shares are `None` when the total is 0; values are returned unrounded.
+
+- **[F-014] Revenue versus target.** `revenue_goal(total_curr, total_prev, *,
+  target_growth_pct, target_absolute)` returns `revenue_yoy`, the resolved
+  `revenue_target` (a growth-% target `prev*(1+pct/100)` takes precedence over an
+  absolute target; a growth target needs `prev > 0`), `revenue_target_basis`, and
+  `revenue_target_pct` (the share of target achieved). Values are unrounded.
+
 ## Out of scope
 
-Any report logic (the metrics themselves and how they are presented) — that
-lives in the consuming routines; shop-specific meta keys, brand/category rules or
-plugin-specific cost logic; writing back to WooCommerce (every helper here is
-read-only against the WC API, except the Dropbox upload which writes only to
-Dropbox); currency conversion (only symbol labelling). The generic,
-vendor-agnostic plumbing itself lives in `claude-code-commons` (re-exported via
-F-011), not here. If any of these are ever needed, add a new feature ID here
-first, then a test, then the code.
+How metrics are *presented* (sheet layout, melding wording) and any
+**shop-specific** rules — which brand is the house brand, shop-specific meta
+keys, plugin-specific cost logic, brand/category business rules — live in the
+consuming routines, not here. The package does provide a few **generic,
+parameterised** KPI helpers (F-012–F-014): they hold no brand names or shop
+knowledge (the house-brand *label* and targets are passed in by the caller), so
+the *definition* of a KPI stays single-sourced while each routine still owns its
+data, presentation and which brand counts as "house". Also out: writing back to
+WooCommerce (every helper here is read-only against the WC API, except the
+Dropbox upload which writes only to Dropbox); currency conversion (only symbol
+labelling). The generic, vendor-agnostic plumbing itself lives in
+`claude-code-commons` (re-exported via F-011), not here. If any of these are ever
+needed, add a new feature ID here first, then a test, then the code.
