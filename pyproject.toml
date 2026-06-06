@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-woocommerce-commons"
-version = "0.6.0"
+version = "1.0.0"
 description = "Shared, vendor-agnostic WooCommerce REST client and reporting helpers (paginated client, parsing, ISO-week windows, Dropbox upload, Excel styling) for WooCommerce reporting routines"
 license = { text = "MIT" }
 # 3.9+ — the code targets a broad floor so it installs in older runtimes
@@ -13,7 +13,7 @@ requires-python = ">=3.9"
 dependencies = [
     # Vendor-agnostic core (env lookup, parse_num, currency_symbol,
     # build_remote_path, log) — re-exported from wc_client for back-compat.
-    "claude-code-commons @ git+https://github.com/mwebbers/ClaudeCodeCommons.git@v0.3.0",
+    "claude-code-commons @ git+https://github.com/mwebbers/ClaudeCodeCommons.git@v1.0.0",
     "requests>=2.31,<3",
     "openpyxl>=3.1,<4",
 ]

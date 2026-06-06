@@ -8,6 +8,11 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-06
+
+First stable release — the public surface is considered stable; this is the v1.0
+milestone for the Claude routine family.
+
 ### Added
 - Self-contained trunk-on-main `CONTRIBUTING.md`, `LICENSE` (MIT) + `license`
   field, `.github/workflows/release.yml` (tag -> GitHub Release) and
@@ -19,6 +24,7 @@ project adheres to semantic versioning.
 - CI: `ruff check` + `ruff format --check` before `pytest`; `actions/checkout` -> v5.
 - Code reformatted by `ruff format` (no behaviour change); `.gitignore` ignores
   coverage artefacts.
+- Pinned code_commons to v1.0.0 (was v0.3.0).
 
 ## [0.6.0] - 2026-06-05
 
