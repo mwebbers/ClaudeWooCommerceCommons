@@ -8,6 +8,18 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+### Added
+- Self-contained trunk-on-main `CONTRIBUTING.md`, `LICENSE` (MIT) + `license`
+  field, `.github/workflows/release.yml` (tag -> GitHub Release) and
+  `.github/dependabot.yml` (weekly pip + actions PRs).
+- Code-coverage gate: `pytest-cov`, **fail_under = 80** in `[tool.coverage]`.
+- Ruff lint + format gate (`[tool.ruff]`), run in CI before the tests.
+
+### Changed
+- CI: `ruff check` + `ruff format --check` before `pytest`; `actions/checkout` -> v5.
+- Code reformatted by `ruff format` (no behaviour change); `.gitignore` ignores
+  coverage artefacts.
+
 ## [0.6.0] - 2026-06-05
 
 ### Added

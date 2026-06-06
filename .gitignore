@@ -9,8 +9,12 @@ dist/
 .DS_Store
 out/
 *.xlsx
+.coverage
+.coverage.*
+htmlcov/
 
 # Secrets and local runtime config — never commit. Copy .env.example to .env.
 .env
 .env.*
 !.env.example
+.ruff_cache/

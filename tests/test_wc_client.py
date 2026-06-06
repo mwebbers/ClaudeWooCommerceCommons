@@ -13,7 +13,6 @@ import requests
 
 import wc_client as C
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -40,9 +39,13 @@ class FakeResp:
 
 @pytest.mark.feature("F-003")
 def test_meta_get():
-    meta = ["a-bare-string", {"key": "x", "value": ""}, {"key": "x", "value": "7"},
-            {"key": "y", "value": "z"}]
-    assert C.meta_get(meta, "x") == "7"        # first non-empty for x, non-dict skipped
+    meta = [
+        "a-bare-string",
+        {"key": "x", "value": ""},
+        {"key": "x", "value": "7"},
+        {"key": "y", "value": "z"},
+    ]
+    assert C.meta_get(meta, "x") == "7"  # first non-empty for x, non-dict skipped
     assert C.meta_get(meta, "missing", "y") == "z"
     assert C.meta_get(meta, "nope") is None
     assert C.meta_get(None, "x") is None
@@ -113,14 +116,18 @@ def test_4xx_not_retried(monkeypatch):
 @pytest.mark.feature("F-005")
 def test_paged_max_pages_cap(monkeypatch):
     client = _client(per_page=1, max_pages=2)
-    monkeypatch.setattr(client, "get_with_retry", lambda url, params=None: FakeResp([{"x": 1}]))
+    monkeypatch.setattr(
+        client, "get_with_retry", lambda url, params=None: FakeResp([{"x": 1}])
+    )
     assert len(list(client.paged("/products"))) == 2  # stopped at cap, no hang
 
 
 @pytest.mark.feature("F-005")
 def test_paged_sets_truncated_flag_on_cap(monkeypatch):
     client = _client(per_page=1, max_pages=2)
-    monkeypatch.setattr(client, "get_with_retry", lambda url, params=None: FakeResp([{"x": 1}]))
+    monkeypatch.setattr(
+        client, "get_with_retry", lambda url, params=None: FakeResp([{"x": 1}])
+    )
     assert client.truncated is False
     list(client.paged("/products"))
     assert client.truncated is True  # cap hit -> caller can detect truncation
@@ -129,10 +136,13 @@ def test_paged_sets_truncated_flag_on_cap(monkeypatch):
 @pytest.mark.feature("F-005")
 def test_paged_stops_on_short_page(monkeypatch):
     client = _client(per_page=10, max_pages=50)
-    monkeypatch.setattr(client, "get_with_retry",
-                        lambda url, params=None: FakeResp([{"x": 1}, {"x": 2}]))
+    monkeypatch.setattr(
+        client,
+        "get_with_retry",
+        lambda url, params=None: FakeResp([{"x": 1}, {"x": 2}]),
+    )
     assert len(list(client.paged("/orders"))) == 2  # short page ends pagination
-    assert client.truncated is False                # natural end -> not truncated
+    assert client.truncated is False  # natural end -> not truncated
 
 
 @pytest.mark.feature("F-005")
@@ -160,7 +170,9 @@ def test_detect_shop_currency(monkeypatch):
                 raise self._exc
             return FakeResp(self._resp)
 
-    assert C.detect_shop_currency(FakeClient({"settings": {"currency": "usd"}})) == "USD"
+    assert (
+        C.detect_shop_currency(FakeClient({"settings": {"currency": "usd"}})) == "USD"
+    )
     # Fail-soft to EUR on error or missing value.
     assert C.detect_shop_currency(FakeClient(exc=RuntimeError("boom"))) == "EUR"
     assert C.detect_shop_currency(FakeClient({"settings": {}})) == "EUR"
@@ -174,10 +186,10 @@ def test_detect_shop_currency(monkeypatch):
 @pytest.mark.feature("F-007")
 def test_iso_week_windows_aligned():
     cur, pri = C.iso_week_windows(4, now=datetime(2026, 5, 30, tzinfo=timezone.utc))
-    assert cur.before.date() == date(2026, 5, 25)   # Monday of in-progress week
+    assert cur.before.date() == date(2026, 5, 25)  # Monday of in-progress week
     assert cur.after.date() == date(2026, 4, 27)
     assert cur.days == 28
-    assert cur.after.weekday() == 0                 # Monday
+    assert cur.after.weekday() == 0  # Monday
     assert pri.after.weekday() == 0
     assert pri.days == 28
     assert (cur.after.date() - pri.after.date()).days in (364, 371)
@@ -209,8 +221,13 @@ def test_upload_to_dropbox_success(monkeypatch, tmp_path):
 
     monkeypatch.setattr(C.requests, "post", fake_post)
     out = C.upload_to_dropbox(
-        app_key="a", app_secret="b", refresh_token="c",
-        local_path=str(f), remote_path="/Reports/report.xlsx", timeout_seconds=5)
+        app_key="a",
+        app_secret="b",
+        refresh_token="c",
+        local_path=str(f),
+        remote_path="/Reports/report.xlsx",
+        timeout_seconds=5,
+    )
     assert out == "/Reports/report.xlsx"
     assert any("oauth2/token" in u for u in calls)
     assert any("files/upload" in u for u in calls)
@@ -228,8 +245,14 @@ def test_upload_to_dropbox_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(C.requests, "post", fake_post)
     with pytest.raises(requests.HTTPError):
-        C.upload_to_dropbox(app_key="a", app_secret="b", refresh_token="c",
-                            local_path=str(f), remote_path="/x", timeout_seconds=5)
+        C.upload_to_dropbox(
+            app_key="a",
+            app_secret="b",
+            refresh_token="c",
+            local_path=str(f),
+            remote_path="/x",
+            timeout_seconds=5,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -261,9 +284,18 @@ def test_excel_helpers():
 @pytest.mark.feature("F-011")
 def test_reexports_core_helpers(monkeypatch):
     # The generic helpers remain importable from wc_client and behave as before.
-    from wc_client import (CURRENCY_SYMBOLS, build_remote_path, currency_symbol,
-                           env_float, env_get, env_int, env_opt, env_required, log,
-                           parse_num)
+    from wc_client import (
+        CURRENCY_SYMBOLS,
+        build_remote_path,
+        currency_symbol,
+        env_float,
+        env_get,
+        env_int,
+        env_opt,
+        env_required,
+        log,
+        parse_num,
+    )
 
     assert parse_num("1,234") == 1234.0
     assert currency_symbol("EUR") == "€"
@@ -285,11 +317,14 @@ def test_reexported_shared_flag_passthrough(monkeypatch):
     # The core `shared` flag (F-001/F-007) passes through the re-export: a prefixed
     # routine-own key ignores the plain form, while shared=True still falls back.
     from wc_client import env_opt
+
     for k in ("KNOB", "STOCK_KNOB"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("KNOB", "plain")
-    assert env_opt("KNOB", "def", prefix="STOCK") == "def"            # prefix-required
-    assert env_opt("KNOB", "def", prefix="STOCK", shared=True) == "plain"  # shared fallback
+    assert env_opt("KNOB", "def", prefix="STOCK") == "def"  # prefix-required
+    assert (
+        env_opt("KNOB", "def", prefix="STOCK", shared=True) == "plain"
+    )  # shared fallback
 
 
 # ---------------------------------------------------------------------------
@@ -300,16 +335,16 @@ def test_reexported_shared_flag_passthrough(monkeypatch):
 @pytest.mark.feature("F-012")
 def test_yoy_pct():
     assert C.yoy_pct(150, 100) == 50.0
-    assert C.yoy_pct(0, 100) == -100.0      # lost all revenue -> -100, defined
-    assert C.yoy_pct(100, 0) is None        # new seller -> undefined, no infinite spike
-    assert C.yoy_pct(100, -5) is None       # negative prior is also undefined
+    assert C.yoy_pct(0, 100) == -100.0  # lost all revenue -> -100, defined
+    assert C.yoy_pct(100, 0) is None  # new seller -> undefined, no infinite spike
+    assert C.yoy_pct(100, -5) is None  # negative prior is also undefined
 
 
 @pytest.mark.feature("F-013")
 def test_house_brand_share():
     curr = {"HuisMerk": 300.0, "Other": 700.0}
     prev = {"HuisMerk": 200.0, "Other": 800.0}
-    r = C.house_brand_share(curr, prev, "huismerk")   # case-insensitive label match
+    r = C.house_brand_share(curr, prev, "huismerk")  # case-insensitive label match
     assert r["hb_curr"] == 300.0 and r["total_curr"] == 1000.0
     assert r["hb_share_curr"] == 30.0
     assert r["hb_share_prev"] == 20.0
@@ -323,8 +358,8 @@ def test_revenue_goal():
     # Growth-% target takes precedence over an absolute target. Kernel values are
     # unrounded by design (the caller rounds), so compare with approx.
     g = C.revenue_goal(660, 500, target_growth_pct=20.0, target_absolute=9999.0)
-    assert g["revenue_target"] == pytest.approx(600.0)       # 500 * 1.2, growth wins
-    assert g["revenue_target_pct"] == pytest.approx(110.0)    # 660 / 600 * 100
+    assert g["revenue_target"] == pytest.approx(600.0)  # 500 * 1.2, growth wins
+    assert g["revenue_target_pct"] == pytest.approx(110.0)  # 660 / 600 * 100
     assert g["revenue_yoy"] == pytest.approx(32.0)
     assert "vs prior year" in g["revenue_target_basis"]
     # Absolute target when no growth-% is given.

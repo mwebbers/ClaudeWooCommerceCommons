@@ -35,8 +35,6 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterator
 
 import requests
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 
 # Generic, vendor-agnostic helpers live in the dependency-light core package and
 # are re-exported so consumers keep importing them from `wc_client` unchanged.
@@ -52,7 +50,8 @@ from code_commons import (  # noqa: F401  (re-exported for backward compatibilit
     log,
     parse_num,
 )
-
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------------------
 # Tolerant WooCommerce meta parsing
@@ -163,17 +162,21 @@ class WooClient:
                     raise  # non-retryable 4xx — bubble immediately
                 if attempt >= self.max_retries:
                     raise
-                wait = self.retry_backoff_base * (2 ** attempt)
-                log(f"WARNING: WC {code} on {url} — retry {attempt + 1}/"
-                    f"{self.max_retries} after {wait}s")
+                wait = self.retry_backoff_base * (2**attempt)
+                log(
+                    f"WARNING: WC {code} on {url} — retry {attempt + 1}/"
+                    f"{self.max_retries} after {wait}s"
+                )
                 time.sleep(wait)
             except (requests.ConnectionError, requests.Timeout) as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise
-                wait = self.retry_backoff_base * (2 ** attempt)
-                log(f"WARNING: WC connection error ({type(exc).__name__}) on "
-                    f"{url} — retry {attempt + 1}/{self.max_retries} after {wait}s")
+                wait = self.retry_backoff_base * (2**attempt)
+                log(
+                    f"WARNING: WC connection error ({type(exc).__name__}) on "
+                    f"{url} — retry {attempt + 1}/{self.max_retries} after {wait}s"
+                )
                 time.sleep(wait)
         raise last_exc  # type: ignore[misc]  # unreachable: loop returns or raises
 
@@ -188,8 +191,10 @@ class WooClient:
         while True:
             if page > self.max_pages:
                 self.truncated = True
-                log(f"WARNING: reached MAX_PAGES={self.max_pages} on {path}. "
-                    "Increase MAX_PAGES if your dataset is larger.")
+                log(
+                    f"WARNING: reached MAX_PAGES={self.max_pages} on {path}. "
+                    "Increase MAX_PAGES if your dataset is larger."
+                )
                 return
             params["page"] = page
             r = self.get_with_retry(f"{self.base}{path}", params=params)
@@ -266,6 +271,7 @@ def upload_to_dropbox(
 class Window:
     """A resolved reporting window. `before` is exclusive. `iso_start` is the
     ISO (year, week) of the window's first day."""
+
     after: datetime
     before: datetime
     label: str
@@ -295,13 +301,19 @@ def _safe_iso_monday(iso_year: int, iso_week: int) -> date:
         return date.fromisocalendar(iso_year, 52, 1)
 
 
-def _window_label(start: date, end: date, iso_year: int, iso_week: int, weeks: int) -> str:
+def _window_label(
+    start: date, end: date, iso_year: int, iso_week: int, weeks: int
+) -> str:
     last_day = end - timedelta(days=1)
-    return (f"{iso_year}-W{iso_week:02d} +{weeks}wk "
-            f"({start.isoformat()}–{last_day.isoformat()})")
+    return (
+        f"{iso_year}-W{iso_week:02d} +{weeks}wk "
+        f"({start.isoformat()}–{last_day.isoformat()})"
+    )
 
 
-def iso_week_windows(weeks: int, now: "datetime | None" = None) -> tuple[Window, Window]:
+def iso_week_windows(
+    weeks: int, now: "datetime | None" = None
+) -> tuple[Window, Window]:
     """Resolve a current and a prior (one-ISO-year-earlier) window of `weeks`
     completed ISO weeks.
 
@@ -315,7 +327,7 @@ def iso_week_windows(weeks: int, now: "datetime | None" = None) -> tuple[Window,
     if now is None:
         now = datetime.now(timezone.utc)
 
-    current_end_date = _monday_of_iso_week(now.date())     # start of the in-progress week
+    current_end_date = _monday_of_iso_week(now.date())  # start of the in-progress week
     current_start_date = current_end_date - timedelta(weeks=weeks)
     cy, cw, _ = current_start_date.isocalendar()
     current = Window(
@@ -377,8 +389,16 @@ def house_brand_share(
     hb = (house_brand or "").strip().lower()
     total_curr = sum(curr_by_brand.values())
     total_prev = sum(prev_by_brand.values())
-    hb_curr = sum(v for k, v in curr_by_brand.items() if k.strip().lower() == hb) if hb else 0.0
-    hb_prev = sum(v for k, v in prev_by_brand.items() if k.strip().lower() == hb) if hb else 0.0
+    hb_curr = (
+        sum(v for k, v in curr_by_brand.items() if k.strip().lower() == hb)
+        if hb
+        else 0.0
+    )
+    hb_prev = (
+        sum(v for k, v in prev_by_brand.items() if k.strip().lower() == hb)
+        if hb
+        else 0.0
+    )
     return {
         "total_curr": total_curr,
         "total_prev": total_prev,
