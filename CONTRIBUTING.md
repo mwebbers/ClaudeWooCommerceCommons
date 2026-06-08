@@ -21,7 +21,7 @@ Tags are always `vX.Y.Z` (a `v` prefix on the version).
 
 ## Daily work
 
-Follow the **SCOPE → test → code → changelog** loop in `CLAUDE.md` (if present), or at
+Follow the **SCOPE → test → code → lint → format → changelog** loop in `CLAUDE.md` (if present), or at
 minimum: add/adjust the test, change the code, keep `pytest` green, and add a line under
 `[Unreleased]` in `CHANGELOG.md`. Every public symbol downstream routines import is part
 of this library's contract — change it deliberately and note breaking changes.
