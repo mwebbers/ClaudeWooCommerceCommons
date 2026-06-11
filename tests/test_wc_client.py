@@ -258,6 +258,77 @@ def test_week_53_clamp():
     assert monday.isocalendar()[:2] == (2025, 52)
 
 
+@pytest.mark.feature("F-007")
+def test_iso_week_windows_shop_timezone_early_monday():
+    from zoneinfo import ZoneInfo
+
+    ams = ZoneInfo("Europe/Amsterdam")
+    # Monday 2026-06-08 00:30 Amsterdam == Sunday 2026-06-07 22:30 UTC: an
+    # early-Monday cron must not report a week-stale window because UTC still
+    # sees Sunday.
+    now = datetime(2026, 6, 7, 22, 30, tzinfo=timezone.utc)
+    cur_utc, _ = C.iso_week_windows(4, now=now)  # UTC "today" is still Sunday
+    cur_ams, _ = C.iso_week_windows(4, now=now, tz=ams)
+    assert cur_utc.before == datetime(2026, 6, 1, tzinfo=timezone.utc)  # stale
+    # Shop-local: the just-completed week IS included, and the boundary is the
+    # local midnight instant (22:00 UTC in summer).
+    assert cur_ams.before == datetime(2026, 6, 8, tzinfo=ams)
+    assert cur_ams.before.astimezone(timezone.utc) == datetime(
+        2026, 6, 7, 22, 0, tzinfo=timezone.utc
+    )
+    assert cur_ams.after == datetime(2026, 5, 11, tzinfo=ams)
+
+
+@pytest.mark.feature("F-007")
+def test_window_days_are_calendar_days_across_dst():
+    from zoneinfo import ZoneInfo
+
+    ams = ZoneInfo("Europe/Amsterdam")
+    # A 10-week window crossing the 2026-03-29 spring-forward is 70 calendar
+    # days but only 70d-1h of absolute time — `days` must still read 70.
+    cur, pri = C.iso_week_windows(
+        10, now=datetime(2026, 4, 15, 12, 0, tzinfo=ams), tz=ams
+    )
+    assert cur.days == 70
+    assert pri.days == 70
+
+
+# ---------------------------------------------------------------------------
+# F-015 Shop timezone + canonical WC date params
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.feature("F-015")
+def test_shop_timezone():
+    assert C.shop_timezone(None) is timezone.utc
+    assert C.shop_timezone("") is timezone.utc
+    assert C.shop_timezone("  ") is timezone.utc
+    tz = C.shop_timezone("Europe/Amsterdam")
+    assert getattr(tz, "key", None) == "Europe/Amsterdam"
+    # A config typo fails loudly, naming the offending value.
+    with pytest.raises(ValueError, match="Not/AZone"):
+        C.shop_timezone("Not/AZone")
+
+
+@pytest.mark.feature("F-015")
+def test_wc_window_params():
+    from zoneinfo import ZoneInfo
+
+    ams = ZoneInfo("Europe/Amsterdam")
+    w = C.Window(
+        after=datetime(2026, 6, 1, tzinfo=ams),
+        before=datetime(2026, 6, 8, tzinfo=ams),
+        label="x",
+        iso_start=(2026, 23),
+    )
+    p = C.wc_window_params(w)
+    # Naive UTC + dates_are_gmt -> identical boundary on legacy and HPOS;
+    # `after` emitted -1s because WP's after is strictly exclusive.
+    assert p["dates_are_gmt"] == "true"
+    assert p["before"] == "2026-06-07T22:00:00"
+    assert p["after"] == "2026-05-31T21:59:59"
+
+
 # ---------------------------------------------------------------------------
 # F-008 Dropbox upload
 # ---------------------------------------------------------------------------

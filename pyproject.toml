@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-woocommerce-commons"
-version = "1.0.0"
+version = "1.1.0"
 description = "Shared, vendor-agnostic WooCommerce REST client and reporting helpers (paginated client, parsing, ISO-week windows, Dropbox upload, Excel styling) for WooCommerce reporting routines"
 license = { text = "MIT" }
 # 3.9+ — the code targets a broad floor so it installs in older runtimes

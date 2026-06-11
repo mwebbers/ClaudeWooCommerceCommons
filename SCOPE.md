@@ -64,14 +64,18 @@ Each feature is testable. The ID in brackets is referenced by tests via
   `currency_symbol` lives in the `claude-code-commons` core and is re-exported —
   see F-011.)
 
-- **[F-007] ISO-week-aligned reporting windows.** `iso_week_windows(weeks, now)`
-  returns a current and a prior window: the current covers the last `weeks`
-  *completed* ISO weeks (ending at 00:00 UTC on the Monday of the ISO week
+- **[F-007] ISO-week-aligned reporting windows.** `iso_week_windows(weeks, now,
+  tz)` returns a current and a prior window: the current covers the last `weeks`
+  *completed* ISO weeks (ending at 00:00 on the Monday of the ISO week
   containing `now`, exclusive), and the prior covers the same ISO week numbers in
   the previous ISO year — weekday-aligned (both start on a Monday) and the same
   length. A week-53 start clamps to week 52 when the previous ISO year has no
-  week 53, without raising. Both windows expose `after`/`before` (UTC, `before`
-  exclusive), a `label` and `iso_start`.
+  week 53, without raising. `tz` (default UTC) is the shop's timezone: "today"
+  is determined in `tz` — so a run early on Monday local time never silently
+  reports a week-stale window from a still-Sunday UTC date — and the window
+  boundaries are `tz`-local midnights (timezone-aware datetimes). Both windows
+  expose `after`/`before` (aware, `before` exclusive), a `label`, `iso_start`
+  and `days` (calendar days, stable across DST transitions).
 
 - **[F-008] Dropbox upload.** `upload_to_dropbox(...)` uploads a local file via
   the app-key + refresh-token OAuth flow in *overwrite* mode and muted (no
@@ -116,6 +120,22 @@ Each feature is testable. The ID in brackets is referenced by tests via
   without a target), `revenue_target_basis` (signed: `+20% vs prior year`,
   `-10% vs prior year`, or `absolute`), and `revenue_target_pct` (the share of
   target achieved). Values are unrounded.
+
+- **[F-015] Shop timezone + canonical WC date params.** Two helpers so every
+  consumer forms its order-window request identically instead of guessing.
+  `shop_timezone(name)` parses an IANA timezone name (the family's shared
+  `WC_TIMEZONE` key) to a `tzinfo`: empty/`None` falls back to UTC, an unknown
+  name raises a `ValueError` naming the offending value (a config typo fails
+  loudly at startup/dry-run, not silently mid-report). `wc_window_params(window)`
+  renders a `Window` to WooCommerce REST params:
+  `{"after", "before", "dates_are_gmt": "true"}` with both instants converted
+  to **naive UTC** strings (`YYYY-MM-DDTHH:MM:SS`). With `dates_are_gmt=true`
+  WooCommerce compares against the GMT date column, so the realised boundary is
+  identical on legacy (CPT) and HPOS order storage. Because WP's `after` is
+  strictly exclusive, the emitted `after` is `window.after − 1s` — the window
+  keeps its `[after, before)` semantics on the wire: an order stamped exactly
+  on the boundary second lands in the window that starts there, and in no
+  other (closes the per-boundary 1-second hole).
 
 ## Out of scope
 

@@ -6,7 +6,20 @@ references the SCOPE.md feature ID(s) it implements.
 The format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to semantic versioning.
 
-## [Unreleased]
+## [1.1.0] - 2026-06-11
+
+### Added
+- F-007: `iso_week_windows` accepts a `tz` (shop timezone): "today" is
+  determined in the shop's local time — an early-Monday run no longer reports
+  a week-stale window from a still-Sunday UTC date — and window boundaries are
+  local-midnight instants. `Window.days` now counts calendar days (stable
+  across DST transitions). Default stays UTC (backwards compatible).
+- F-015 (new): `shop_timezone(name)` parses the family's shared `WC_TIMEZONE`
+  key (empty → UTC, typo → loud `ValueError`), and `wc_window_params(window)`
+  renders the canonical WC date params: naive-UTC strings +
+  `dates_are_gmt=true` (identical boundary on legacy/HPOS storage) with
+  `after` emitted −1s so the window keeps `[after, before)` semantics on the
+  wire (closes the per-boundary 1-second hole).
 
 ### Fixed
 - F-005: `paged()` now requests a stable sort (`orderby=id`, `order=asc`) by

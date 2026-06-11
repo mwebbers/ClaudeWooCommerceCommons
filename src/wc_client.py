@@ -31,8 +31,9 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from typing import Any, Iterator
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -299,11 +300,13 @@ class Window:
 
     @property
     def days(self) -> int:
-        return (self.before - self.after).days
+        # Calendar days, not absolute time: a window crossing a DST transition
+        # is e.g. 70d-1h of absolute time but still 70 calendar days (F-007).
+        return (self.before.date() - self.after.date()).days
 
 
-def _utc_midnight(d: date) -> datetime:
-    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+def _midnight(d: date, tz: tzinfo) -> datetime:
+    return datetime(d.year, d.month, d.day, tzinfo=tz)
 
 
 def _monday_of_iso_week(d: date) -> date:
@@ -332,27 +335,35 @@ def _window_label(
 
 
 def iso_week_windows(
-    weeks: int, now: "datetime | None" = None
+    weeks: int, now: "datetime | None" = None, tz: "tzinfo | None" = None
 ) -> tuple[Window, Window]:
     """Resolve a current and a prior (one-ISO-year-earlier) window of `weeks`
     completed ISO weeks.
 
-    Current: ends at 00:00 UTC on the Monday of the ISO week containing `now`
-    (exclusive — the in-progress week is never half-counted) and starts `weeks`
-    weeks earlier (also a Monday). Prior: the same ISO week number in the
-    previous ISO year, weekday-aligned (both start on a Monday) and the same
-    length. Week 53 clamps to 52 when last year has no week 53. `now` is
-    injectable for tests.
-    """
-    if now is None:
-        now = datetime.now(timezone.utc)
+    Current: ends at 00:00 in `tz` (default UTC) on the Monday of the ISO week
+    containing `now` (exclusive — the in-progress week is never half-counted)
+    and starts `weeks` weeks earlier (also a Monday). Prior: the same ISO week
+    number in the previous ISO year, weekday-aligned (both start on a Monday)
+    and the same length. Week 53 clamps to 52 when last year has no week 53.
 
-    current_end_date = _monday_of_iso_week(now.date())  # start of the in-progress week
+    `tz` is the shop's timezone (F-007): "today" is determined in `tz` — so a
+    run early on Monday local time never reports a week-stale window because
+    UTC still reads Sunday — and the boundaries are `tz`-local midnight
+    instants. `now` is injectable for tests; an aware `now` is converted to
+    `tz` first, a naive one is taken as already-local.
+    """
+    if tz is None:
+        tz = timezone.utc
+    if now is None:
+        now = datetime.now(tz)
+    today = now.astimezone(tz).date() if now.tzinfo is not None else now.date()
+
+    current_end_date = _monday_of_iso_week(today)  # start of the in-progress week
     current_start_date = current_end_date - timedelta(weeks=weeks)
     cy, cw, _ = current_start_date.isocalendar()
     current = Window(
-        after=_utc_midnight(current_start_date),
-        before=_utc_midnight(current_end_date),
+        after=_midnight(current_start_date, tz),
+        before=_midnight(current_end_date, tz),
         label=_window_label(current_start_date, current_end_date, cy, cw, weeks),
         iso_start=(cy, cw),
     )
@@ -361,12 +372,48 @@ def iso_week_windows(
     prior_end_date = prior_start_date + timedelta(weeks=weeks)
     py, pw, _ = prior_start_date.isocalendar()
     prior = Window(
-        after=_utc_midnight(prior_start_date),
-        before=_utc_midnight(prior_end_date),
+        after=_midnight(prior_start_date, tz),
+        before=_midnight(prior_end_date, tz),
         label=_window_label(prior_start_date, prior_end_date, py, pw, weeks),
         iso_start=(py, pw),
     )
     return current, prior
+
+
+def shop_timezone(name: "str | None") -> tzinfo:
+    """Parse an IANA timezone name (the family's shared ``WC_TIMEZONE`` key) to
+    a tzinfo (F-015). Empty/None falls back to UTC; an unknown name raises a
+    ValueError naming the value, so a config typo fails loudly at
+    startup/--dry-run rather than silently mid-report."""
+    if name is None or not str(name).strip():
+        return timezone.utc
+    cleaned = str(name).strip()
+    try:
+        return ZoneInfo(cleaned)
+    except (KeyError, ValueError) as exc:
+        raise ValueError(
+            f"Invalid WC_TIMEZONE {cleaned!r}: not a known IANA timezone "
+            "(e.g. Europe/Amsterdam)"
+        ) from exc
+
+
+def wc_window_params(window: Window) -> dict:
+    """Render a Window to canonical WooCommerce REST date params (F-015).
+
+    Emits naive-UTC strings plus ``dates_are_gmt=true`` so WooCommerce compares
+    against the GMT date column — the realised boundary is then identical on
+    legacy (CPT) and HPOS order storage. WP's ``after`` is strictly exclusive,
+    so it is emitted as ``window.after − 1s``: the window keeps its
+    ``[after, before)`` semantics on the wire and an order stamped exactly on
+    the boundary second lands in the window that starts there, and in no other.
+    """
+    after = (window.after - timedelta(seconds=1)).astimezone(timezone.utc)
+    before = window.before.astimezone(timezone.utc)
+    return {
+        "after": after.strftime("%Y-%m-%dT%H:%M:%S"),
+        "before": before.strftime("%Y-%m-%dT%H:%M:%S"),
+        "dates_are_gmt": "true",
+    }
 
 
 # ---------------------------------------------------------------------------
