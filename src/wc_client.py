@@ -168,7 +168,12 @@ class WooClient:
                     f"{self.max_retries} after {wait}s"
                 )
                 time.sleep(wait)
-            except (requests.ConnectionError, requests.Timeout) as exc:
+            except (
+                requests.ConnectionError,
+                requests.Timeout,
+                # a connection that dies mid-body is not a ConnectionError
+                requests.exceptions.ChunkedEncodingError,
+            ) as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise
@@ -184,9 +189,17 @@ class WooClient:
         """Yield every item across pages of a WC list endpoint, stopping after
         `max_pages` with a clear warning AND setting `self.truncated = True`, so a
         runaway loop or a much larger dataset is both visible and *detectable* by
-        the caller rather than a silent under-count."""
+        the caller rather than a silent under-count.
+
+        A stable sort (`orderby=id`, `order=asc`) is requested by default —
+        explicit caller params win — because under WC's newest-first default a
+        row created or removed mid-pull shifts every later row across the page
+        boundary, double-yielding or skipping items; with ascending ids, new
+        rows land beyond the cursor instead."""
         params = dict(params or {})
         params["per_page"] = self.per_page
+        params.setdefault("orderby", "id")
+        params.setdefault("order", "asc")
         page = 1
         while True:
             if page > self.max_pages:
@@ -205,6 +218,13 @@ class WooClient:
                 yield item
             if len(batch) < self.per_page:
                 return
+            # A dataset of exactly max_pages full pages is complete, not
+            # truncated: trust X-WP-TotalPages when present; without the header
+            # fall through and report the cap conservatively as truncation.
+            if page == self.max_pages:
+                total_raw = str(r.headers.get("X-WP-TotalPages") or "").strip()
+                if total_raw.isdigit() and int(total_raw) == self.max_pages:
+                    return
             page += 1
 
 
@@ -419,14 +439,17 @@ def revenue_goal(
     """Revenue versus target for one window.
 
     A growth-% target (``total_prev * (1 + pct/100)``) takes precedence over an
-    absolute target; with neither, the target is undefined. A growth target needs
-    a positive prior to resolve. ``revenue_target_pct`` is the share of target
-    achieved (``curr / target * 100``). Values are unrounded; the caller rounds.
+    absolute target when it can resolve (``prev > 0``); with a non-positive
+    prior it falls back to the absolute target when given, else the target is
+    undefined — a basis is never returned without a target. The basis string is
+    signed (``+20%``/``-10% vs prior year``). ``revenue_target_pct`` is the
+    share of target achieved (``curr / target * 100``). Values are unrounded;
+    the caller rounds.
     """
     revenue_yoy = yoy_pct(total_curr, total_prev)
-    if target_growth_pct is not None:
-        target = total_prev * (1 + target_growth_pct / 100) if total_prev > 0 else None
-        basis = f"+{target_growth_pct:g}% vs prior year"
+    if target_growth_pct is not None and total_prev > 0:
+        target = total_prev * (1 + target_growth_pct / 100)
+        basis = f"{target_growth_pct:+g}% vs prior year"
     elif target_absolute is not None:
         target = target_absolute
         basis = "absolute"

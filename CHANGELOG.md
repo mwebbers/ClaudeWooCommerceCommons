@@ -8,6 +8,19 @@ project adheres to semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+- F-005: `paged()` now requests a stable sort (`orderby=id`, `order=asc`) by
+  default (explicit caller params win), so rows created/removed during a
+  multi-page pull can no longer be double-yielded or skipped under WC's
+  newest-first default ordering.
+- F-005: a dataset that ends at exactly `max_pages` full pages is recognised as
+  complete via `X-WP-TotalPages` and no longer sets the false `truncated` flag.
+- F-004: a connection that drops mid-body (`ChunkedEncodingError`) now hits the
+  retry path instead of killing the run.
+- F-014: `revenue_goal` renders decline targets signed (`-10%`, not `"+-10%"`),
+  falls back to a supplied absolute target when the growth target cannot resolve
+  (`prev <= 0`), and never returns a basis string without a target.
+
 ## [1.0.0] - 2026-06-06
 
 First stable release — the public surface is considered stable; this is the v1.0

@@ -19,10 +19,11 @@ import wc_client as C
 
 
 class FakeResp:
-    def __init__(self, data=None, status=200):
+    def __init__(self, data=None, status=200, headers=None):
         self._data = data
         self.status_code = status
         self.text = ""
+        self.headers = headers or {}
 
     def json(self):
         return self._data
@@ -94,6 +95,25 @@ def test_5xx_retried_then_raises(monkeypatch):
 
 
 @pytest.mark.feature("F-004")
+def test_mid_body_drop_retried(monkeypatch):
+    # A connection that dies while the body is being read surfaces as
+    # ChunkedEncodingError (not ConnectionError) — must hit the same retry path.
+    client = _client(max_retries=2, retry_backoff_base=0)
+    calls = {"n": 0}
+
+    def drops_mid_body(url, params=None, timeout=None):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise requests.exceptions.ChunkedEncodingError("connection broken")
+        return FakeResp({"ok": True})
+
+    monkeypatch.setattr(client.session, "get", drops_mid_body)
+    monkeypatch.setattr(C.time, "sleep", lambda s: None)
+    assert client.get_with_retry("https://shop.example/x").json() == {"ok": True}
+    assert calls["n"] == 2
+
+
+@pytest.mark.feature("F-004")
 def test_4xx_not_retried(monkeypatch):
     client = _client(max_retries=3)
     calls = {"n": 0}
@@ -150,6 +170,42 @@ def test_paged_stops_on_empty(monkeypatch):
     client = _client()
     monkeypatch.setattr(client, "get_with_retry", lambda url, params=None: FakeResp([]))
     assert list(client.paged("/orders")) == []
+
+
+@pytest.mark.feature("F-005")
+def test_paged_pins_stable_sort_by_default(monkeypatch):
+    # Without a pinned sort, WC's newest-first default lets a row created
+    # mid-pull shift the page boundaries (duplicate/skipped items).
+    client = _client()
+    seen = {}
+
+    def capture(url, params=None):
+        seen.update(params)
+        return FakeResp([])
+
+    monkeypatch.setattr(client, "get_with_retry", capture)
+    list(client.paged("/orders"))
+    assert seen["orderby"] == "id" and seen["order"] == "asc"
+    # An explicit caller choice wins over the default.
+    list(client.paged("/orders", {"orderby": "date", "order": "desc"}))
+    assert seen["orderby"] == "date" and seen["order"] == "desc"
+
+
+@pytest.mark.feature("F-005")
+def test_paged_exact_max_pages_fit_is_not_truncated(monkeypatch):
+    # Dataset of exactly max_pages full pages: X-WP-TotalPages says the pull is
+    # complete, so the truncated flag must NOT be set (no false "incomplete").
+    client = _client(per_page=1, max_pages=2)
+    calls = {"n": 0}
+
+    def serve(url, params=None):
+        calls["n"] += 1
+        return FakeResp([{"x": params["page"]}], headers={"X-WP-TotalPages": "2"})
+
+    monkeypatch.setattr(client, "get_with_retry", serve)
+    assert len(list(client.paged("/products"))) == 2
+    assert client.truncated is False
+    assert calls["n"] == 2  # page max_pages+1 was never requested
 
 
 # ---------------------------------------------------------------------------
@@ -370,3 +426,15 @@ def test_revenue_goal():
     # No target -> undefined; a growth target needs a positive prior.
     assert C.revenue_goal(800, 500)["revenue_target"] is None
     assert C.revenue_goal(800, 0, target_growth_pct=20.0)["revenue_target"] is None
+    # A basis is never returned without a target (no orphaned "+20% vs ...").
+    assert (
+        C.revenue_goal(800, 0, target_growth_pct=20.0)["revenue_target_basis"] is None
+    )
+    # Unresolvable growth target falls back to a supplied absolute target.
+    fb = C.revenue_goal(800, 0, target_growth_pct=20.0, target_absolute=1000.0)
+    assert fb["revenue_target"] == 1000.0
+    assert fb["revenue_target_basis"] == "absolute"
+    # A decline target renders signed, not "+-10%".
+    d = C.revenue_goal(450, 500, target_growth_pct=-10.0)
+    assert d["revenue_target"] == pytest.approx(450.0)
+    assert d["revenue_target_basis"] == "-10% vs prior year"

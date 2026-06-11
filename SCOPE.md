@@ -39,7 +39,8 @@ Each feature is testable. The ID in brackets is referenced by tests via
   raising. Returns `None` when nothing matches.
 
 - **[F-004] Retry-with-backoff on transient failures.** `WooClient.get_with_retry`
-  retries on connection errors/timeouts, HTTP 5xx and HTTP 429 up to
+  retries on connection errors/timeouts — including a connection that drops
+  mid-body (`ChunkedEncodingError`) — HTTP 5xx and HTTP 429 up to
   `max_retries` times with exponential backoff (`retry_backoff_base × 2**attempt`
   seconds); other 4xx (401, 404, …) are raised immediately and never retried.
 
@@ -50,6 +51,12 @@ Each feature is testable. The ID in brackets is referenced by tests via
   stops at the cap it sets `WooClient.truncated = True` so the caller can tell a
   truncated result from a naturally-exhausted one and flag the report as
   incomplete. The flag starts `False` and is sticky for the client's life.
+  Requests carry a stable sort (`orderby=id`, `order=asc`) by default — explicit
+  caller params win — so rows created or removed mid-pull cannot shift items
+  between page fetches (WC's default newest-first ordering would double-yield or
+  skip rows). A dataset that ends exactly at `max_pages` full pages is recognised
+  as complete via the `X-WP-TotalPages` response header and does **not** set the
+  flag; without that header the cap is conservatively reported as truncation.
 
 - **[F-006] Shop-currency detection.** `detect_shop_currency(client)` reads the
   shop currency (3-letter code) from `/system_status` via the retry layer and
@@ -103,8 +110,12 @@ Each feature is testable. The ID in brackets is referenced by tests via
 - **[F-014] Revenue versus target.** `revenue_goal(total_curr, total_prev, *,
   target_growth_pct, target_absolute)` returns `revenue_yoy`, the resolved
   `revenue_target` (a growth-% target `prev*(1+pct/100)` takes precedence over an
-  absolute target; a growth target needs `prev > 0`), `revenue_target_basis`, and
-  `revenue_target_pct` (the share of target achieved). Values are unrounded.
+  absolute target *when it can resolve*, i.e. `prev > 0`; with a non-positive
+  prior it falls back to the absolute target when given, else `revenue_target`
+  **and** `revenue_target_basis` are both `None` — a basis is never returned
+  without a target), `revenue_target_basis` (signed: `+20% vs prior year`,
+  `-10% vs prior year`, or `absolute`), and `revenue_target_pct` (the share of
+  target achieved). Values are unrounded.
 
 ## Out of scope
 
