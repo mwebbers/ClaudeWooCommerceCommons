@@ -28,6 +28,10 @@ must stay covered by a test (`tests/test_scope_coverage.py` enforces it).
 - Run `pytest` after any change. Network (WC REST API, Dropbox) is always mocked;
   the suite never hits a real shop or Dropbox.
 - After a behaviour change, add a line under `[Unreleased]` in `CHANGELOG.md`.
+- Before committing, review: adversarially re-read the full uncommitted diff for
+  real defects — edge cases, wrong assumptions, criteria the tests miss (in
+  Claude Code, `/code-review`). Style is not a finding (ruff owns style); a
+  session habit, not a CI gate.
 - **This is a dependency of the consuming reporting routines.** A breaking
   change to a public name (`WooClient`, `parse_num`, `iso_week_windows`, …) must
   bump the version and be rolled out to each consumer by bumping its pinned
